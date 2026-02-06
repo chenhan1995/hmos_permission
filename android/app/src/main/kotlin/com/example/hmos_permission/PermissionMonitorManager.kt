@@ -5,6 +5,7 @@ import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.ContentResolver
 import android.content.Context
+import android.content.Intent
 import android.database.ContentObserver
 import android.hardware.camera2.CameraManager
 import android.media.AudioManager
