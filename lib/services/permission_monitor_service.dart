@@ -339,6 +339,50 @@ class PermissionMonitorService {
     }
   }
 
+  Future<void> startForegroundService() async {
+    try {
+      await _methodChannel.invokeMethod('startForegroundService');
+      _isMonitoring = true;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Future<void> stopForegroundService() async {
+    try {
+      await _methodChannel.invokeMethod('stopForegroundService');
+      _isMonitoring = false;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Future<bool> isServiceRunning() async {
+    try {
+      final result = await _methodChannel.invokeMethod<bool>('isServiceRunning');
+      return result ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<void> setAutoStartOnBoot(bool enabled) async {
+    try {
+      await _methodChannel.invokeMethod('setAutoStartOnBoot', {'enabled': enabled});
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Future<bool> isAutoStartOnBoot() async {
+    try {
+      final result = await _methodChannel.invokeMethod<bool>('isAutoStartOnBoot');
+      return result ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+
   Future<List<ActivePermissionUsage>> getRecentPermissionUsage({int minutes = 5}) async {
     try {
       final result = await _methodChannel.invokeMethod<List<dynamic>>(

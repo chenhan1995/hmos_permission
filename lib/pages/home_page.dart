@@ -15,7 +15,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   
   SystemInfo? _systemInfo;
   bool _isMonitoring = false;
+  bool _isServiceRunning = false;
   bool _hasUsageStatsPermission = false;
+  bool _autoStartOnBoot = false;
   final List<PermissionEvent> _events = [];
   StreamSubscription<PermissionEvent>? _eventSubscription;
   
@@ -36,6 +38,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     _loadSystemInfo();
     _checkPermissions();
     _checkUsageStatsPermission();
+    _checkServiceStatus();
     _subscribeToEvents();
   }
 
@@ -43,6 +46,16 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     final hasPermission = await _monitorService.hasUsageStatsPermission();
     setState(() {
       _hasUsageStatsPermission = hasPermission;
+    });
+  }
+
+  Future<void> _checkServiceStatus() async {
+    final isRunning = await _monitorService.isServiceRunning();
+    final autoStart = await _monitorService.isAutoStartOnBoot();
+    setState(() {
+      _isServiceRunning = isRunning;
+      _isMonitoring = isRunning;
+      _autoStartOnBoot = autoStart;
     });
   }
 
@@ -120,16 +133,34 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   Future<void> _toggleMonitoring() async {
     try {
       if (_isMonitoring) {
-        await _monitorService.stopMonitoring();
+        await _monitorService.stopForegroundService();
+        setState(() {
+          _isMonitoring = false;
+          _isServiceRunning = false;
+        });
       } else {
-        await _monitorService.startMonitoring();
+        await _monitorService.startForegroundService();
+        setState(() {
+          _isMonitoring = true;
+          _isServiceRunning = true;
+        });
       }
-      setState(() {
-        _isMonitoring = !_isMonitoring;
-      });
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('操作失败: $e')),
+      );
+    }
+  }
+
+  Future<void> _toggleAutoStart(bool value) async {
+    try {
+      await _monitorService.setAutoStartOnBoot(value);
+      setState(() {
+        _autoStartOnBoot = value;
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('设置失败: $e')),
       );
     }
   }
@@ -349,40 +380,58 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       color: _isMonitoring ? Colors.green.shade50 : Colors.grey.shade100,
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Row(
+        child: Column(
           children: [
-            Container(
-              width: 12,
-              height: 12,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: _isMonitoring ? Colors.green : Colors.grey,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _isMonitoring ? '监听中' : '未监听',
-                    style: Theme.of(context).textTheme.titleMedium,
+            Row(
+              children: [
+                Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: _isMonitoring ? Colors.green : Colors.grey,
                   ),
-                  Text(
-                    _isMonitoring 
-                        ? '正在监听系统和应用的权限使用情况' 
-                        : '点击下方按钮开始监听',
-                    style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _isServiceRunning ? '前台服务运行中' : (_isMonitoring ? '监听中' : '未监听'),
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      Text(
+                        _isMonitoring 
+                            ? '退出应用后仍会在后台持续监听' 
+                            : '点击下方按钮开始监听',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+                Column(
+                  children: [
+                    Text(
+                      '${_events.length}',
+                      style: Theme.of(context).textTheme.headlineMedium,
+                    ),
+                    const Text('事件'),
+                  ],
+                ),
+              ],
             ),
-            Text(
-              '${_events.length}',
-              style: Theme.of(context).textTheme.headlineMedium,
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('开机自启动'),
+                Switch(
+                  value: _autoStartOnBoot,
+                  onChanged: _toggleAutoStart,
+                ),
+              ],
             ),
-            const SizedBox(width: 4),
-            const Text('事件'),
           ],
         ),
       ),
