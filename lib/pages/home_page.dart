@@ -15,6 +15,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   
   SystemInfo? _systemInfo;
   bool _isMonitoring = false;
+  bool _hasUsageStatsPermission = false;
   final List<PermissionEvent> _events = [];
   StreamSubscription<PermissionEvent>? _eventSubscription;
   
@@ -34,7 +35,15 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     _tabController = TabController(length: 3, vsync: this);
     _loadSystemInfo();
     _checkPermissions();
+    _checkUsageStatsPermission();
     _subscribeToEvents();
+  }
+
+  Future<void> _checkUsageStatsPermission() async {
+    final hasPermission = await _monitorService.hasUsageStatsPermission();
+    setState(() {
+      _hasUsageStatsPermission = hasPermission;
+    });
   }
 
   @override
@@ -213,10 +222,72 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         children: [
           _buildSystemInfoCard(),
           const SizedBox(height: 16),
+          _buildUsageStatsPermissionCard(),
+          const SizedBox(height: 16),
           _buildMonitoringStatusCard(),
           const SizedBox(height: 16),
           _buildQuickPermissionStatusCard(),
         ],
+      ),
+    );
+  }
+
+  Widget _buildUsageStatsPermissionCard() {
+    return Card(
+      color: _hasUsageStatsPermission ? Colors.green.shade50 : Colors.orange.shade50,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  _hasUsageStatsPermission ? Icons.check_circle : Icons.warning,
+                  color: _hasUsageStatsPermission ? Colors.green : Colors.orange,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '使用情况访问权限',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _hasUsageStatsPermission
+                  ? '已授权，可以监听其他应用的权限使用'
+                  : '未授权，无法监听其他应用的权限使用。这是监听第三方应用的必要权限。',
+              style: TextStyle(
+                color: _hasUsageStatsPermission ? Colors.green.shade700 : Colors.orange.shade700,
+                fontSize: 13,
+              ),
+            ),
+            if (!_hasUsageStatsPermission) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    await _monitorService.openUsageStatsSettings();
+                    // Check again after a delay
+                    Future.delayed(const Duration(seconds: 2), () {
+                      _checkUsageStatsPermission();
+                    });
+                  },
+                  icon: const Icon(Icons.settings),
+                  label: const Text('去授权'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -527,9 +598,13 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   Color _getEventColor(PermissionEvent event) {
     if (event.type == 'error') return Colors.red;
+    if (event.type == 'warning') return Colors.orange;
     if (event.type == 'monitoring_started') return Colors.green;
     if (event.type == 'monitoring_stopped') return Colors.orange;
     if (event.type == 'call_state_changed') return Colors.blue;
+    if (event.type == 'camera_in_use' || event.type == 'camera_available') return Colors.purple;
+    if (event.type == 'audio_recording_started' || event.type == 'audio_recording_stopped') return Colors.red;
+    if (event.type == 'sms_activity') return Colors.orange;
     
     final permType = event.permissionType;
     if (permType == null) return Colors.grey;
@@ -550,9 +625,15 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   IconData _getEventIcon(PermissionEvent event) {
     if (event.type == 'error') return Icons.error;
+    if (event.type == 'warning') return Icons.warning;
     if (event.type == 'monitoring_started') return Icons.play_circle;
     if (event.type == 'monitoring_stopped') return Icons.stop_circle;
     if (event.type == 'call_state_changed') return Icons.phone;
+    if (event.type == 'camera_in_use') return Icons.camera_alt;
+    if (event.type == 'camera_available') return Icons.camera_alt_outlined;
+    if (event.type == 'audio_recording_started') return Icons.mic;
+    if (event.type == 'audio_recording_stopped') return Icons.mic_off;
+    if (event.type == 'sms_activity') return Icons.sms;
     
     final permType = event.permissionType;
     if (permType == null) return Icons.info;

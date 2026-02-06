@@ -62,8 +62,20 @@ class PermissionEvent {
         return '监听已停止';
       case 'error':
         return '错误: ${message ?? "未知错误"}';
+      case 'warning':
+        return '警告: ${message ?? "未知警告"}';
+      case 'camera_in_use':
+        return '相机正在被使用';
+      case 'camera_available':
+        return '相机已释放';
+      case 'audio_recording_started':
+        return '检测到麦克风录音';
+      case 'audio_recording_stopped':
+        return '麦克风录音已停止';
+      case 'sms_activity':
+        return '检测到短信活动';
       default:
-        return type;
+        return message ?? type;
     }
   }
 
@@ -307,6 +319,41 @@ class PermissionMonitorService {
       return result ?? false;
     } catch (e) {
       return false;
+    }
+  }
+
+  Future<bool> hasUsageStatsPermission() async {
+    try {
+      final result = await _methodChannel.invokeMethod<bool>('hasUsageStatsPermission');
+      return result ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<void> openUsageStatsSettings() async {
+    try {
+      await _methodChannel.invokeMethod('openUsageStatsSettings');
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Future<List<ActivePermissionUsage>> getRecentPermissionUsage({int minutes = 5}) async {
+    try {
+      final result = await _methodChannel.invokeMethod<List<dynamic>>(
+        'getRecentPermissionUsage',
+        {'minutes': minutes},
+      );
+      if (result != null) {
+        return result
+            .whereType<Map<dynamic, dynamic>>()
+            .map((e) => ActivePermissionUsage.fromMap(e))
+            .toList();
+      }
+      return [];
+    } catch (e) {
+      rethrow;
     }
   }
 
