@@ -7,7 +7,6 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.content.SharedPreferences
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
@@ -22,13 +21,6 @@ class PermissionMonitorService : Service() {
         const val NOTIFICATION_ID = 1001
         const val ACTION_START = "com.example.hmos_permission.START_MONITORING"
         const val ACTION_STOP = "com.example.hmos_permission.STOP_MONITORING"
-        const val PREFS_NAME = "permission_monitor_prefs"
-        const val KEY_SERVICE_RUNNING = "service_running"
-        const val KEY_AUTO_START = "auto_start_on_boot"
-        
-        private var isRunning = false
-        
-        fun isServiceRunning(): Boolean = isRunning
         
         fun start(context: Context) {
             val intent = Intent(context, PermissionMonitorService::class.java)
@@ -38,80 +30,31 @@ class PermissionMonitorService : Service() {
             } else {
                 context.startService(intent)
             }
-            
-            // 保存状态
-            getPrefs(context).edit().putBoolean(KEY_SERVICE_RUNNING, true).apply()
         }
         
         fun stop(context: Context) {
             val intent = Intent(context, PermissionMonitorService::class.java)
             intent.action = ACTION_STOP
             context.startService(intent)
-            
-            // 保存状态
-            getPrefs(context).edit().putBoolean(KEY_SERVICE_RUNNING, false).apply()
-        }
-        
-        fun shouldRestart(context: Context): Boolean {
-            return getPrefs(context).getBoolean(KEY_SERVICE_RUNNING, false)
-        }
-        
-        fun setAutoStartOnBoot(context: Context, enabled: Boolean) {
-            getPrefs(context).edit().putBoolean(KEY_AUTO_START, enabled).apply()
-        }
-        
-        fun isAutoStartOnBoot(context: Context): Boolean {
-            return getPrefs(context).getBoolean(KEY_AUTO_START, false)
-        }
-        
-        private fun getPrefs(context: Context): SharedPreferences {
-            return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        }
-    }
-    
-    private var eventCount = 0
-    private val eventListener = object : PermissionMonitorManager.EventListener {
-        override fun onEvent(event: Map<String, Any?>) {
-            eventCount++
-            updateNotification()
         }
     }
     
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        PermissionMonitorManager.initialize(this)
-        PermissionMonitorManager.addListener(eventListener)
-        isRunning = true
     }
     
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START -> {
                 startForeground(NOTIFICATION_ID, createNotification())
-                PermissionMonitorManager.startMonitoring()
             }
             ACTION_STOP -> {
-                PermissionMonitorManager.stopMonitoring()
-                PermissionMonitorManager.removeListener(eventListener)
-                isRunning = false
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
-                return START_NOT_STICKY
             }
         }
         return START_STICKY
-    }
-    
-    override fun onDestroy() {
-        super.onDestroy()
-        PermissionMonitorManager.removeListener(eventListener)
-        isRunning = false
-        
-        // 如果服务意外被杀，尝试重启
-        if (shouldRestart(this)) {
-            start(this)
-        }
     }
     
     override fun onBind(intent: Intent?): IBinder? = null
@@ -132,18 +75,11 @@ class PermissionMonitorService : Service() {
         }
     }
     
-    private fun updateNotification() {
-        val notificationManager = getSystemService(NotificationManager::class.java)
-        notificationManager.notify(NOTIFICATION_ID, createNotification())
-    }
-    
     private fun createNotification(): Notification {
         val pendingIntent = PendingIntent.getActivity(
             this,
             0,
-            Intent(this, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            },
+            Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         
@@ -159,7 +95,7 @@ class PermissionMonitorService : Service() {
         
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("权限监听中")
-            .setContentText("已捕获 $eventCount 个事件，点击查看详情")
+            .setContentText("正在监听系统和应用的权限使用情况")
             .setSmallIcon(android.R.drawable.ic_menu_info_details)
             .setContentIntent(pendingIntent)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "停止", stopPendingIntent)

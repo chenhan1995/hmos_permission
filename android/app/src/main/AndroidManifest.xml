@@ -33,6 +33,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
     
     <!-- 后台运行权限 -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
@@ -75,7 +76,7 @@
             android:name=".PermissionMonitorService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="camera|microphone|location" />
+            android:foregroundServiceType="camera|microphone|location|phoneCall" />
         
         <!-- 开机启动广播接收器 -->
         <receiver
