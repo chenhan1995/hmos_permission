@@ -1,0 +1,12 @@
+{
+  "name": "hmos_permission",
+  "version": "1.0.0",
+  "description": "HarmonyOS NEXT Permission Monitor Application",
+  "main": "",
+  "author": "",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {
+    "@ohos/hypium": "1.0.6"
+  }
+}

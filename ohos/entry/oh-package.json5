@@ -1,0 +1,9 @@
+{
+  "name": "entry",
+  "version": "1.0.0",
+  "description": "Permission Monitor Entry Module",
+  "main": "",
+  "author": "",
+  "license": "MIT",
+  "dependencies": {}
+}

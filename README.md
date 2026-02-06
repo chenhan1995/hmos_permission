@@ -91,6 +91,18 @@ android/app/src/main/kotlin/.../
 2. 部分功能在 Android 10 (API 29) 以下版本可能受限
 3. 鸿蒙系统的部分特性可能需要额外适配
 
+## 纯血鸿蒙 (HarmonyOS NEXT) 支持
+
+本项目已适配纯血鸿蒙系统，原生实现位于 `ohos/` 目录。
+
+### 快速开始
+
+1. 使用 DevEco Studio 5.0+ 打开 `ohos/` 目录
+2. 配置签名证书
+3. 运行或构建项目
+
+详细说明请参阅 [ohos/README.md](./ohos/README.md)
+
 ## License
 
 MIT License
