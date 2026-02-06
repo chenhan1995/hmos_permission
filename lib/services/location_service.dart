@@ -166,6 +166,22 @@ class LocationService {
     _isListening = true;
     _updateStatus(LocationServiceStatus.listening);
 
+    // 先获取一次当前位置
+    try {
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: LocationSettings(
+          accuracy: accuracy,
+          timeLimit: const Duration(seconds: 15),
+        ),
+      );
+      _lastLocation = LocationInfo.fromPosition(position);
+      if (!_locationController.isClosed) {
+        _locationController.add(_lastLocation!);
+      }
+    } catch (e) {
+      debugPrint('Error getting initial location: $e');
+    }
+
     final locationSettings = LocationSettings(
       accuracy: accuracy,
       distanceFilter: distanceFilter,
@@ -176,11 +192,15 @@ class LocationService {
     ).listen(
           (Position position) {
         _lastLocation = LocationInfo.fromPosition(position);
-        _locationController.add(_lastLocation!);
+        if (!_locationController.isClosed) {
+          _locationController.add(_lastLocation!);
+        }
       },
       onError: (error) {
         debugPrint('Location stream error: $error');
-        _locationController.addError(error);
+        if (!_locationController.isClosed) {
+          _locationController.addError(error);
+        }
       },
     );
 
