@@ -1,34 +1,16 @@
 package com.example.hmos_permission
 
 import android.app.AppOpsManager
-import android.app.usage.UsageEvents
-import android.app.usage.UsageStatsManager
-import android.content.BroadcastReceiver
 import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.PackageManager
-import android.database.ContentObserver
-import android.hardware.camera2.CameraManager
-import android.media.AudioManager
-import android.media.AudioRecordingConfiguration
-import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
-import android.provider.Settings
-import android.provider.Telephony
-import android.telephony.PhoneStateListener
-import android.telephony.TelephonyCallback
-import android.telephony.TelephonyManager
 import android.Manifest
-import android.location.LocationManager
-import androidx.annotation.RequiresApi
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
-import java.util.concurrent.Executors
 
 class PermissionMonitorPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     private lateinit var methodChannel: MethodChannel
@@ -36,25 +18,8 @@ class PermissionMonitorPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     private lateinit var context: Context
     private var eventSink: EventChannel.EventSink? = null
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val executor = Executors.newSingleThreadExecutor()
     
-    private var appOpsManager: AppOpsManager? = null
-    private var telephonyManager: TelephonyManager? = null
-    private var cameraManager: CameraManager? = null
-    private var audioManager: AudioManager? = null
-    private var usageStatsManager: UsageStatsManager? = null
-    private var locationManager: LocationManager? = null
-    private var isMonitoring = false
-    
-    private val opCallbacks = mutableListOf<Any>()
-    private var cameraCallback: CameraManager.AvailabilityCallback? = null
-    private var audioRecordingCallback: AudioManager.AudioRecordingCallback? = null
-    private var smsObserver: ContentObserver? = null
-    private var pollingRunnable: Runnable? = null
-    
-    // Track active camera/mic usage
-    private val activeCameraApps = mutableSetOf<String>()
-    private val activeMicApps = mutableSetOf<String>()
+    private var eventListener: PermissionMonitorManager.EventListener? = null
     
     companion object {
         const val METHOD_CHANNEL = "com.example.hmos_permission/method"
@@ -71,27 +36,60 @@ class PermissionMonitorPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         eventChannel.setStreamHandler(object : EventChannel.StreamHandler {
             override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
                 eventSink = events
+                setupEventListener()
+                
+                // 发送历史事件给新连接的UI
+                sendHistoryEvents()
             }
 
             override fun onCancel(arguments: Any?) {
                 eventSink = null
+                removeEventListener()
             }
         })
         
-        appOpsManager = context.getSystemService(Context.APP_OPS_SERVICE) as? AppOpsManager
-        telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
-        cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as? CameraManager
-        audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-        locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+        // 初始化管理器
+        PermissionMonitorManager.initialize(context)
         
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
-            usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
+        // 如果服务正在运行，恢复监听状态
+        if (PermissionMonitorService.isServiceRunning()) {
+            setupEventListener()
+        }
+    }
+    
+    private fun setupEventListener() {
+        if (eventListener != null) return
+        
+        eventListener = object : PermissionMonitorManager.EventListener {
+            override fun onEvent(event: Map<String, Any?>) {
+                mainHandler.post {
+                    eventSink?.success(event)
+                }
+            }
+        }
+        PermissionMonitorManager.addListener(eventListener!!)
+    }
+    
+    private fun removeEventListener() {
+        eventListener?.let {
+            PermissionMonitorManager.removeListener(it)
+            eventListener = null
+        }
+    }
+    
+    private fun sendHistoryEvents() {
+        val history = PermissionMonitorManager.getEventHistory()
+        // 发送最近的事件（倒序，最新的在前）
+        history.take(50).reversed().forEach { event ->
+            mainHandler.post {
+                eventSink?.success(event)
+            }
         }
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         methodChannel.setMethodCallHandler(null)
-        stopMonitoring()
+        removeEventListener()
     }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
@@ -104,8 +102,27 @@ class PermissionMonitorPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 stopMonitoring()
                 result.success(true)
             }
+            "startForegroundService" -> {
+                startForegroundService()
+                result.success(true)
+            }
+            "stopForegroundService" -> {
+                stopForegroundService()
+                result.success(true)
+            }
+            "isServiceRunning" -> {
+                result.success(PermissionMonitorService.isServiceRunning())
+            }
+            "setAutoStartOnBoot" -> {
+                val enabled = call.argument<Boolean>("enabled") ?: false
+                PermissionMonitorService.setAutoStartOnBoot(context, enabled)
+                result.success(true)
+            }
+            "isAutoStartOnBoot" -> {
+                result.success(PermissionMonitorService.isAutoStartOnBoot(context))
+            }
             "getSystemInfo" -> {
-                result.success(getSystemInfo())
+                result.success(PermissionMonitorManager.getSystemInfo())
             }
             "checkPermissionStatus" -> {
                 val permissionType = call.argument<String>("type")
@@ -115,164 +132,39 @@ class PermissionMonitorPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 result.success(getActivePermissionUsage())
             }
             "isHarmonyOS" -> {
-                result.success(isHarmonyOS())
+                result.success(HarmonyOSAdapter.isHarmonyOS())
             }
             "hasUsageStatsPermission" -> {
-                result.success(hasUsageStatsPermission())
+                result.success(PermissionMonitorManager.hasUsageStatsPermission())
             }
             "openUsageStatsSettings" -> {
-                openUsageStatsSettings()
+                PermissionMonitorManager.openUsageStatsSettings()
                 result.success(true)
             }
-            "getRecentPermissionUsage" -> {
-                val minutes = call.argument<Int>("minutes") ?: 5
-                result.success(getRecentPermissionUsage(minutes))
+            "getEventHistory" -> {
+                result.success(PermissionMonitorManager.getEventHistory())
             }
             else -> result.notImplemented()
         }
     }
     
     private fun startMonitoring() {
-        if (isMonitoring) return
-        isMonitoring = true
-        
-        // Check usage stats permission
-        val hasUsageStats = hasUsageStatsPermission()
-        
-        sendEvent(mapOf(
-            "type" to "monitoring_started",
-            "timestamp" to System.currentTimeMillis(),
-            "apiLevel" to Build.VERSION.SDK_INT,
-            "hasUsageStatsPermission" to hasUsageStats
-        ))
-        
-        if (!hasUsageStats) {
-            sendEvent(mapOf(
-                "type" to "warning",
-                "message" to "需要授予\"使用情况访问权限\"才能监听其他应用的权限使用",
-                "action" to "openUsageStatsSettings",
-                "timestamp" to System.currentTimeMillis()
-            ))
-        }
-        
-        // Start camera availability monitoring
-        startCameraMonitoring()
-        
-        // Start audio recording monitoring
-        startAudioRecordingMonitoring()
-        
-        // Start telephony monitoring
-        startTelephonyMonitoring()
-        
-        // Start SMS monitoring
-        startSmsMonitoring()
-        
-        // Start AppOps monitoring for API 29+
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startAppOpsMonitoring()
-        }
-        
-        // Start polling for usage stats
-        startUsageStatsPolling()
+        PermissionMonitorManager.initialize(context)
+        PermissionMonitorManager.startMonitoring()
+        setupEventListener()
     }
     
-    private fun startCameraMonitoring() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            cameraCallback = object : CameraManager.AvailabilityCallback() {
-                override fun onCameraAvailable(cameraId: String) {
-                    // Camera became available (was released)
-                    sendEvent(mapOf(
-                        "type" to "camera_available",
-                        "cameraId" to cameraId,
-                        "message" to "相机 $cameraId 已释放",
-                        "timestamp" to System.currentTimeMillis()
-                    ))
-                }
-
-                override fun onCameraUnavailable(cameraId: String) {
-                    // Camera is being used
-                    sendEvent(mapOf(
-                        "type" to "camera_in_use",
-                        "cameraId" to cameraId,
-                        "message" to "相机 $cameraId 正在被使用",
-                        "timestamp" to System.currentTimeMillis()
-                    ))
-                    
-                    // Try to find which app is using it
-                    findCameraUsingApp()
-                }
-            }
-            cameraManager?.registerAvailabilityCallback(cameraCallback!!, mainHandler)
-            opCallbacks.add(cameraCallback!!)
-        }
+    private fun stopMonitoring() {
+        PermissionMonitorManager.stopMonitoring()
     }
     
-    private fun findCameraUsingApp() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && hasUsageStatsPermission()) {
-            executor.execute {
-                try {
-                    val packages = context.packageManager.getInstalledApplications(PackageManager.GET_META_DATA)
-                    for (app in packages) {
-                        try {
-                            val isActive = appOpsManager?.isOpActive(
-                                AppOpsManager.OPSTR_CAMERA,
-                                app.uid,
-                                app.packageName
-                            ) ?: false
-                            
-                            if (isActive && !activeCameraApps.contains(app.packageName)) {
-                                activeCameraApps.add(app.packageName)
-                                val appName = getAppName(app.packageName)
-                                sendEvent(mapOf(
-                                    "type" to "permission_active_changed",
-                                    "operation" to AppOpsManager.OPSTR_CAMERA,
-                                    "operationName" to "相机",
-                                    "packageName" to app.packageName,
-                                    "appName" to appName,
-                                    "uid" to app.uid,
-                                    "active" to true,
-                                    "timestamp" to System.currentTimeMillis()
-                                ))
-                            }
-                        } catch (e: Exception) {
-                            // Skip
-                        }
-                    }
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            }
-        }
+    private fun startForegroundService() {
+        PermissionMonitorService.start(context)
+        setupEventListener()
     }
     
-    @RequiresApi(Build.VERSION_CODES.N)
-    private fun startAudioRecordingMonitoring() {
-        audioRecordingCallback = object : AudioManager.AudioRecordingCallback() {
-            override fun onRecordingConfigChanged(configs: List<AudioRecordingConfiguration>) {
-                if (configs.isNotEmpty()) {
-                    for (config in configs) {
-                        val clientUid = config.clientAudioSessionId
-                        sendEvent(mapOf(
-                            "type" to "audio_recording_started",
-                            "sessionId" to clientUid,
-                            "message" to "检测到麦克风正在录音",
-                            "timestamp" to System.currentTimeMillis()
-                        ))
-                    }
-                    // Try to find which app is recording
-                    findMicUsingApp()
-                } else {
-                    sendEvent(mapOf(
-                        "type" to "audio_recording_stopped",
-                        "message" to "麦克风录音已停止",
-                        "timestamp" to System.currentTimeMillis()
-                    ))
-                    activeMicApps.clear()
-                }
-            }
-        }
-        audioManager?.registerAudioRecordingCallback(audioRecordingCallback!!, mainHandler)
-        opCallbacks.add(audioRecordingCallback!!)
+    private fun stopForegroundService() {
+        PermissionMonitorService.stop(context)
     }
     
     private fun findMicUsingApp() {
