@@ -1,4 +1,4 @@
-import { ServiceExtensionAbility, Want } from '@kit.AbilityKit';
+import { AppServiceExtensionAbility, Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { PermissionMonitorService } from '../services/PermissionMonitorService';
 import { PermissionEvent } from '../model/PermissionModel';
@@ -10,7 +10,7 @@ const DOMAIN: number = 0x0000;
  * 权限监听后台服务扩展
  * 用于在后台持续监听权限使用情况
  */
-export default class PermissionMonitorExtension extends ServiceExtensionAbility {
+export default class PermissionMonitorExtension extends AppServiceExtensionAbility {
   private monitorService: PermissionMonitorService = new PermissionMonitorService();
 
   onCreate(want: Want): void {

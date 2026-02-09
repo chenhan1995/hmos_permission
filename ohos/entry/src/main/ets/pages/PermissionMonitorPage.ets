@@ -145,7 +145,7 @@ struct PermissionMonitorPage {
       case PermissionType.PHONE:
         return $r('sys.media.ohos_ic_public_phone');
       case PermissionType.SMS:
-        return $r('sys.media.ohos_ic_public_message');
+        return $r('sys.media.ohos_ic_public_email');
       default:
         return $r('sys.media.ohos_ic_public_more');
     }

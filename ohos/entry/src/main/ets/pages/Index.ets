@@ -152,7 +152,7 @@ struct Index {
       { name: '麦克风', icon: $r('sys.media.ohos_ic_public_voice') },
       { name: '定位', icon: $r('sys.media.ohos_ic_public_location') },
       { name: '通话', icon: $r('sys.media.ohos_ic_public_phone') },
-      { name: '短信', icon: $r('sys.media.ohos_ic_public_message') }
+      { name: '短信', icon: $r('sys.media.ohos_ic_public_email') }
     ];
   }
 }

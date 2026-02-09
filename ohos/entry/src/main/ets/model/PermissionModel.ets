@@ -16,7 +16,17 @@ export class PermissionEvent {
 
   constructor(data?: Partial<PermissionEvent>) {
     if (data) {
-      Object.assign(this, data);
+      if (data.type !== undefined) this.type = data.type;
+      if (data.operation !== undefined) this.operation = data.operation;
+      if (data.operationName !== undefined) this.operationName = data.operationName;
+      if (data.packageName !== undefined) this.packageName = data.packageName;
+      if (data.appName !== undefined) this.appName = data.appName;
+      if (data.uid !== undefined) this.uid = data.uid;
+      if (data.active !== undefined) this.active = data.active;
+      if (data.state !== undefined) this.state = data.state;
+      if (data.stateCode !== undefined) this.stateCode = data.stateCode;
+      if (data.message !== undefined) this.message = data.message;
+      if (data.timestamp !== undefined) this.timestamp = data.timestamp;
     }
   }
 
@@ -104,7 +114,12 @@ export class SystemInfo {
 
   constructor(data?: Partial<SystemInfo>) {
     if (data) {
-      Object.assign(this, data);
+      if (data.apiVersion !== undefined) this.apiVersion = data.apiVersion;
+      if (data.deviceType !== undefined) this.deviceType = data.deviceType;
+      if (data.manufacturer !== undefined) this.manufacturer = data.manufacturer;
+      if (data.brand !== undefined) this.brand = data.brand;
+      if (data.model !== undefined) this.model = data.model;
+      if (data.osFullName !== undefined) this.osFullName = data.osFullName;
     }
   }
 
@@ -125,7 +140,11 @@ export class ActivePermissionUsage {
 
   constructor(data?: Partial<ActivePermissionUsage>) {
     if (data) {
-      Object.assign(this, data);
+      if (data.packageName !== undefined) this.packageName = data.packageName;
+      if (data.appName !== undefined) this.appName = data.appName;
+      if (data.operation !== undefined) this.operation = data.operation;
+      if (data.operationName !== undefined) this.operationName = data.operationName;
+      if (data.active !== undefined) this.active = data.active;
     }
   }
 }
