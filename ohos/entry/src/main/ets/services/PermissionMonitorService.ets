@@ -12,6 +12,15 @@ const DOMAIN: number = 0x0000;
 
 type EventCallback = (event: PermissionEvent) => void;
 
+type ForegroundApplicationInfo = {
+  bundleName: string;
+  uid?: number;
+};
+
+type AppManagerWithForeground = {
+  getForegroundApplications: () => Promise<ForegroundApplicationInfo[]>;
+};
+
 /**
  * 权限监听服务 - HarmonyOS NEXT 原生实现
  */
@@ -172,9 +181,9 @@ export class PermissionMonitorService {
         
         // 获取当前前台应用
         if (!isInUse) {
-          // const foregroundApp = await this.getForegroundAppInfo();
-          cameraEvent.appName = "foregroundApp";
-          cameraEvent.message = ` 正在使用相机`;
+          const foregroundApp = await this.getForegroundAppInfo();
+          cameraEvent.appName = foregroundApp;
+          cameraEvent.message = `${foregroundApp} 正在使用相机`;
         } else {
           cameraEvent.message = '相机已释放';
         }
@@ -203,8 +212,8 @@ export class PermissionMonitorService {
 
         if (capturerChangeInfoArray.length > 0) {
           // 获取当前前台应用
-          // const foregroundAppDetail = await this.getForegroundAppDetail();
-          const foregroundApp = 'foregroundAppDetail.appName';
+          const foregroundAppDetail = await this.getForegroundAppDetail();
+          const foregroundApp = foregroundAppDetail.appName;
           
           // 遍历每个活跃的音频捕获器
           capturerChangeInfoArray.forEach((info: audio.AudioCapturerChangeInfo) => {
@@ -215,10 +224,10 @@ export class PermissionMonitorService {
             audioEvent.active = true;
             audioEvent.timestamp = Date.now();
             audioEvent.appName = foregroundApp;
-            // audioEvent.packageName = foregroundAppDetail.packageName;
-            // if (foregroundAppDetail.uid !== undefined) {
-            //   audioEvent.uid = foregroundAppDetail.uid;
-            // }
+            audioEvent.packageName = foregroundAppDetail.packageName;
+            if (foregroundAppDetail.uid !== undefined) {
+              audioEvent.uid = foregroundAppDetail.uid;
+            }
             
             // 获取音频源类型
             const sourceType = info.capturerInfo?.source;
@@ -289,9 +298,9 @@ export class PermissionMonitorService {
         
         // 获取当前前台应用
         if (isEnabled) {
-          // const foregroundApp = await this.getForegroundAppInfo();
-          // locationEvent.appName = foregroundApp;
-          locationEvent.message = ` 可能正在使用定位`;
+          const foregroundApp = await this.getForegroundAppInfo();
+          locationEvent.appName = foregroundApp;
+          locationEvent.message = `${foregroundApp} 可能正在使用定位`;
         } else {
           locationEvent.message = '定位服务已关闭';
         }
@@ -349,6 +358,49 @@ export class PermissionMonitorService {
     // HarmonyOS NEXT 暂不支持直接获取其他应用的权限使用情况
     // 这里返回空数组，实际使用中需要通过系统级API
     return [];
+  }
+
+  private async getForegroundAppInfo(): Promise<string> {
+    try {
+      const foregroundApps = await (appManager as AppManagerWithForeground).getForegroundApplications();
+      if (foregroundApps && foregroundApps.length > 0) {
+        return foregroundApps[0].bundleName;
+      }
+      return '未知应用';
+    } catch (error) {
+      hilog.error(DOMAIN, TAG, 'Failed to get foreground app: %{public}s', JSON.stringify(error));
+      return '未知应用';
+    }
+  }
+
+  private async getForegroundAppDetail(): Promise<{ appName: string; packageName?: string; uid?: number }> {
+    try {
+      const foregroundApps = await (appManager as AppManagerWithForeground).getForegroundApplications();
+      if (foregroundApps && foregroundApps.length > 0) {
+        const app = foregroundApps[0];
+        let label: string = app.bundleName;
+        try {
+          const bundleInfo = await bundleManager.getBundleInfo(app.bundleName, bundleManager.BundleFlag.GET_BUNDLE_INFO_WITH_APPLICATION);
+          label = bundleInfo.appInfo?.label || app.bundleName;
+        } catch {
+        }
+
+        const detail: { appName: string; packageName?: string; uid?: number } = {
+          appName: label,
+          packageName: app.bundleName
+        };
+
+        if (app.uid !== undefined) {
+          detail.uid = app.uid;
+        }
+
+        return detail;
+      }
+      return { appName: '未知应用' };
+    } catch (error) {
+      hilog.error(DOMAIN, TAG, 'Failed to get foreground app detail: %{public}s', JSON.stringify(error));
+      return { appName: '未知应用' };
+    }
   }
 
   /**
