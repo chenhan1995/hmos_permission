@@ -23,32 +23,6 @@ export class PermissionMonitorService {
   private callStateCallback?: (state: call.CallState) => void;
 
   /**
-   * 获取当前前台应用信息
-   */
-  private async getForegroundAppInfo(): Promise<string> {
-    try {
-      const foregroundApps = await appManager.getForegroundApplications();
-      if (foregroundApps && foregroundApps.length > 0) {
-        const appNames: string[] = [];
-        for (const app of foregroundApps) {
-          try {
-            const bundleInfo = await bundleManager.getBundleInfo(app.bundleName, bundleManager.BundleFlag.GET_BUNDLE_INFO_WITH_APPLICATION);
-            const label = bundleInfo.appInfo?.label || app.bundleName;
-            appNames.push(label);
-          } catch {
-            appNames.push(app.bundleName);
-          }
-        }
-        return appNames.join(', ');
-      }
-      return '未知应用';
-    } catch (error) {
-      hilog.error(DOMAIN, TAG, 'Failed to get foreground app: %{public}s', JSON.stringify(error));
-      return '未知应用';
-    }
-  }
-
-  /**
    * 获取系统信息
    */
   async getSystemInfo(): Promise<SystemInfo> {
@@ -198,9 +172,9 @@ export class PermissionMonitorService {
         
         // 获取当前前台应用
         if (!isInUse) {
-          const foregroundApp = await this.getForegroundAppInfo();
-          cameraEvent.appName = foregroundApp;
-          cameraEvent.message = `${foregroundApp} 正在使用相机`;
+          // const foregroundApp = await this.getForegroundAppInfo();
+          cameraEvent.appName = "foregroundApp";
+          cameraEvent.message = ` 正在使用相机`;
         } else {
           cameraEvent.message = '相机已释放';
         }
@@ -229,7 +203,8 @@ export class PermissionMonitorService {
 
         if (capturerChangeInfoArray.length > 0) {
           // 获取当前前台应用
-          const foregroundApp = await this.getForegroundAppInfo();
+          // const foregroundAppDetail = await this.getForegroundAppDetail();
+          const foregroundApp = 'foregroundAppDetail.appName';
           
           // 遍历每个活跃的音频捕获器
           capturerChangeInfoArray.forEach((info: audio.AudioCapturerChangeInfo) => {
@@ -240,6 +215,10 @@ export class PermissionMonitorService {
             audioEvent.active = true;
             audioEvent.timestamp = Date.now();
             audioEvent.appName = foregroundApp;
+            // audioEvent.packageName = foregroundAppDetail.packageName;
+            // if (foregroundAppDetail.uid !== undefined) {
+            //   audioEvent.uid = foregroundAppDetail.uid;
+            // }
             
             // 获取音频源类型
             const sourceType = info.capturerInfo?.source;
@@ -310,9 +289,9 @@ export class PermissionMonitorService {
         
         // 获取当前前台应用
         if (isEnabled) {
-          const foregroundApp = await this.getForegroundAppInfo();
-          locationEvent.appName = foregroundApp;
-          locationEvent.message = `${foregroundApp} 可能正在使用定位`;
+          // const foregroundApp = await this.getForegroundAppInfo();
+          // locationEvent.appName = foregroundApp;
+          locationEvent.message = ` 可能正在使用定位`;
         } else {
           locationEvent.message = '定位服务已关闭';
         }
