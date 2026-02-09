@@ -1,4 +1,4 @@
-import { abilityAccessCtrl, bundleManager, Permissions } from '@kit.AbilityKit';
+import { abilityAccessCtrl, bundleManager, Permissions, appManager } from '@kit.AbilityKit';
 import { camera } from '@kit.CameraKit';
 import { audio } from '@kit.AudioKit';
 import { geoLocationManager } from '@kit.LocationKit';
@@ -21,6 +21,32 @@ export class PermissionMonitorService {
   private cameraManager?: camera.CameraManager;
   private audioManager?: audio.AudioManager;
   private callStateCallback?: (state: call.CallState) => void;
+
+  /**
+   * 获取当前前台应用信息
+   */
+  private async getForegroundAppInfo(): Promise<string> {
+    try {
+      const foregroundApps = await appManager.getForegroundApplications();
+      if (foregroundApps && foregroundApps.length > 0) {
+        const appNames: string[] = [];
+        for (const app of foregroundApps) {
+          try {
+            const bundleInfo = await bundleManager.getBundleInfo(app.bundleName, bundleManager.BundleFlag.GET_BUNDLE_INFO_WITH_APPLICATION);
+            const label = bundleInfo.appInfo?.label || app.bundleName;
+            appNames.push(label);
+          } catch {
+            appNames.push(app.bundleName);
+          }
+        }
+        return appNames.join(', ');
+      }
+      return '未知应用';
+    } catch (error) {
+      hilog.error(DOMAIN, TAG, 'Failed to get foreground app: %{public}s', JSON.stringify(error));
+      return '未知应用';
+    }
+  }
 
   /**
    * 获取系统信息
@@ -96,6 +122,12 @@ export class PermissionMonitorService {
         this.cameraManager.off('cameraStatus');
       }
 
+      // 停止音频监听
+      if (this.audioManager) {
+        const audioStreamManager = this.audioManager.getStreamManager();
+        audioStreamManager.off('audioCapturerChange');
+      }
+
       // 停止通话状态监听
       // Note: Call state monitoring cleanup handled automatically
 
@@ -149,7 +181,7 @@ export class PermissionMonitorService {
     try {
       this.cameraManager = camera.getCameraManager(getContext(this));
 
-      this.cameraManager.on('cameraStatus', (err, cameraStatusInfo) => {
+      this.cameraManager.on('cameraStatus', async (err, cameraStatusInfo) => {
         if (err) {
           hilog.error(DOMAIN, TAG, 'Camera status error: %{public}s', JSON.stringify(err));
           return;
@@ -162,8 +194,17 @@ export class PermissionMonitorService {
         cameraEvent.type = isInUse ? 'camera_available' : 'camera_in_use';
         cameraEvent.operation = 'camera';
         cameraEvent.operationName = '相机';
-        cameraEvent.message = isInUse ? '相机已释放' : '相机正在被使用';
         cameraEvent.timestamp = Date.now();
+        
+        // 获取当前前台应用
+        if (!isInUse) {
+          const foregroundApp = await this.getForegroundAppInfo();
+          cameraEvent.appName = foregroundApp;
+          cameraEvent.message = `${foregroundApp} 正在使用相机`;
+        } else {
+          cameraEvent.message = '相机已释放';
+        }
+        
         this.sendEvent(cameraEvent);
       });
 
@@ -179,9 +220,49 @@ export class PermissionMonitorService {
   private async startAudioMonitoring(): Promise<void> {
     try {
       this.audioManager = audio.getAudioManager();
-      // Note: Advanced audio monitoring APIs may require system-level permissions
-      // Basic audio manager initialized for future use
-      hilog.info(DOMAIN, TAG, 'Audio monitoring initialized');
+      
+      // 监听音频捕获器状态变化（麦克风使用）
+      const audioStreamManager = this.audioManager.getStreamManager();
+
+      audioStreamManager.on('audioCapturerChange', async (capturerChangeInfoArray: audio.AudioCapturerChangeInfoArray) => {
+        hilog.info(DOMAIN, TAG, 'Audio capturer change: %{public}s', JSON.stringify(capturerChangeInfoArray));
+
+        if (capturerChangeInfoArray.length > 0) {
+          // 获取当前前台应用
+          const foregroundApp = await this.getForegroundAppInfo();
+          
+          // 遍历每个活跃的音频捕获器
+          capturerChangeInfoArray.forEach((info: audio.AudioCapturerChangeInfo) => {
+            const audioEvent = new PermissionEvent();
+            audioEvent.type = 'audio_recording_started';
+            audioEvent.operation = 'microphone';
+            audioEvent.operationName = '麦克风';
+            audioEvent.active = true;
+            audioEvent.timestamp = Date.now();
+            audioEvent.appName = foregroundApp;
+            
+            // 获取音频源类型
+            const sourceType = info.capturerInfo?.source;
+            const sourceName = this.getAudioSourceName(sourceType);
+            audioEvent.message = `${foregroundApp} 正在录音 (${sourceName})`;
+            
+            this.sendEvent(audioEvent);
+          });
+        } else {
+          // 没有活跃的捕获器，录音已停止
+          const audioEvent = new PermissionEvent();
+          audioEvent.type = 'audio_recording_stopped';
+          audioEvent.operation = 'microphone';
+          audioEvent.operationName = '麦克风';
+          audioEvent.active = false;
+          audioEvent.message = '麦克风录音已停止';
+          audioEvent.timestamp = Date.now();
+          
+          this.sendEvent(audioEvent);
+        }
+      });
+      
+      hilog.info(DOMAIN, TAG, 'Audio monitoring started with capturer state listener');
     } catch (error) {
       hilog.error(DOMAIN, TAG, 'Failed to start audio monitoring: %{public}s', JSON.stringify(error));
     }
@@ -219,14 +300,23 @@ export class PermissionMonitorService {
       }
 
       // 监听定位服务状态变化
-      geoLocationManager.on('locationEnabledChange', (isEnabled: boolean) => {
+      geoLocationManager.on('locationEnabledChange', async (isEnabled: boolean) => {
         const locationEvent = new PermissionEvent();
         locationEvent.type = 'permission_active_changed';
         locationEvent.operation = 'location';
         locationEvent.operationName = '定位';
         locationEvent.active = isEnabled;
-        locationEvent.message = isEnabled ? '定位服务已开启' : '定位服务已关闭';
         locationEvent.timestamp = Date.now();
+        
+        // 获取当前前台应用
+        if (isEnabled) {
+          const foregroundApp = await this.getForegroundAppInfo();
+          locationEvent.appName = foregroundApp;
+          locationEvent.message = `${foregroundApp} 可能正在使用定位`;
+        } else {
+          locationEvent.message = '定位服务已关闭';
+        }
+        
         this.sendEvent(locationEvent);
       });
 
@@ -280,6 +370,27 @@ export class PermissionMonitorService {
     // HarmonyOS NEXT 暂不支持直接获取其他应用的权限使用情况
     // 这里返回空数组，实际使用中需要通过系统级API
     return [];
+  }
+
+  /**
+   * 获取音频源类型名称
+   */
+  private getAudioSourceName(source?: audio.SourceType): string {
+    if (source === undefined) {
+      return '未知来源';
+    }
+    switch (source) {
+      case audio.SourceType.SOURCE_TYPE_MIC:
+        return '麦克风';
+      case audio.SourceType.SOURCE_TYPE_VOICE_RECOGNITION:
+        return '语音识别';
+      case audio.SourceType.SOURCE_TYPE_VOICE_COMMUNICATION:
+        return '语音通话';
+      case audio.SourceType.SOURCE_TYPE_VOICE_MESSAGE:
+        return '语音消息';
+      default:
+        return `音频源(${source})`;
+    }
   }
 
   /**
