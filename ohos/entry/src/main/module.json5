@@ -33,15 +33,6 @@
         ]
       }
     ],
-    "extensionAbilities": [
-      {
-        "name": "PermissionMonitorExtension",
-        "srcEntry": "./ets/extension/PermissionMonitorExtension.ets",
-        "type": "service",
-        "description": "$string:permission_monitor_desc",
-        "exported": false
-      }
-    ],
     "requestPermissions": [
       {
         "name": "ohos.permission.CAMERA",
