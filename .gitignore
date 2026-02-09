@@ -45,3 +45,4 @@ app.*.map.json
 /android/app/release
 /ohos/oh_modules/
 /ohos/.hvigor/
+/ohos/entry/build/
